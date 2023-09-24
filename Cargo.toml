@@ -1,0 +1,19 @@
+[package]
+name = "n-mb"
+authors = ["Djkáťo <djkatovfx@gmail.com>"]
+version = "1.0.0"
+edition = "2021"
+description = "Simple ffmpeg wrapper to parse files to the most efficient formats within a set size"
+license = "MIT OR Apache-2.0"
+homepage = "https://github.com/djkato/n-mb"
+repository = "https://github.com/djkato/n-mb"
+readme = "README.md"
+keywords = ["media", "ffmpeg", "cli"]
+categories = ["command-line-utilities"]
+
+[dependencies]
+anyhow = "1.0.75"
+clap = { version = "4.4.4", features = ["cargo"] }
+indicatif = "0.17.7"
+pbr = "1.1.1"
+tokio = { version = "1.32.0", features = ["full"] }
