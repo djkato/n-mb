@@ -20,3 +20,4 @@ tokio = { version = "1.32.0", features = ["full"] }
 
 [[bin]]
 name="nmb"
+path="src/main.rs"

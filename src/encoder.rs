@@ -2,11 +2,13 @@ use anyhow::{bail, Context};
 use pbr::{Pipe, ProgressBar};
 use std::{path::PathBuf, process::Stdio};
 use tokio::{
-    io::{AsyncBufReadExt, BufReader, Lines},
-    process::{Child, ChildStderr, ChildStdout, Command},
+    io::{BufReader, Lines},
+    process::{Child, ChildStdout, Command},
 };
+
+use crate::VideoCodec;
 const MAX_OPUS_BITRATE: f32 = 256.; //kbits
-const MIN_OPUS_BITRATE: f32 = 50.; //kbits
+const MIN_OPUS_BITRATE: f32 = 56.; //kbits
 
 pub struct FFMPEGCommand {
     pub file_name: String,
@@ -23,10 +25,21 @@ pub struct FFMPEGCommand {
     pub progress_bar: Option<ProgressBar<Pipe>>,
 }
 
+struct MediaData {
+    resolution: Option<(u16, u16)>,
+    duration: f32,
+    old_kbit_rate: Option<u16>,
+}
+
 impl FFMPEGCommand {
-    pub async fn new(media_type: MediaType, path: &PathBuf, size: u16) -> anyhow::Result<Self> {
+    pub async fn new(
+        media_type: MediaType,
+        path: &PathBuf,
+        size: u16,
+        codec: VideoCodec,
+    ) -> anyhow::Result<Self> {
         match media_type {
-            MediaType::Video => Self::create_video(path, size).await,
+            MediaType::Video => Self::create_video(path, size, codec).await,
             MediaType::Audio => Self::create_audio(path, size).await,
             MediaType::Image => Self::create_image(path, size),
             MediaType::AnimatedImage => Self::create_animated_image(path),
@@ -35,11 +48,29 @@ impl FFMPEGCommand {
 
     async fn create_audio(path: &PathBuf, size: u16) -> anyhow::Result<Self> {
         let ffprobe_out = parse_ffprobe(path).await?;
-        let duration = ffprobe_out.0.context("Duration missing")?;
+        let duration = ffprobe_out.duration;
+        let max_kbit_rate = match ffprobe_out.old_kbit_rate {
+            None => MAX_OPUS_BITRATE,
+            Some(r) => {
+                if (r as f32) < MAX_OPUS_BITRATE {
+                    r as f32
+                } else {
+                    MAX_OPUS_BITRATE
+                }
+            }
+        };
 
-        let bitrate = (size as f32 * 1000. / duration) * 0.95;
-        let bitrate = bitrate.clamp(MIN_OPUS_BITRATE, MAX_OPUS_BITRATE) as u16;
-
+        let bitrate = (size as f32 * 1000. / duration) * 0.9;
+        let bitrate = bitrate.clamp(MIN_OPUS_BITRATE, max_kbit_rate) as u16;
+        /*
+        println!(
+            "{} * {} ~= {} (actually is {})",
+            duration,
+            bitrate,
+            size * 1000,
+            duration * bitrate as f32
+        );
+        */
         let mut new_path = path.clone();
         new_path.set_extension("ogg");
 
@@ -76,18 +107,18 @@ impl FFMPEGCommand {
         })
     }
 
-    async fn create_video(path: &PathBuf, size: u16) -> anyhow::Result<Self> {
+    async fn create_video(path: &PathBuf, size: u16, codec: VideoCodec) -> anyhow::Result<Self> {
         let ffprobe_out = parse_ffprobe(path).await?;
 
-        let duration = ffprobe_out.0.context("Duration missing")?;
-        let resolution = ffprobe_out.1.context("Missing resolution")?;
+        let duration = ffprobe_out.duration;
+        let resolution = ffprobe_out.resolution.context("Missing resolution")?;
 
         let mut overflown_audio_bitrate = None;
-        let mut audio_bitrate = (size as f32 * 1000. / duration) * 0.95 * 0.1;
-        let mut video_bitrate = (size as f32 * 1000. / duration) * 0.95 * 0.9;
+        let mut audio_bitrate = size as f32 * 180. / duration;
+        let mut video_bitrate = size as f32 * 780. / duration;
 
         if audio_bitrate < MIN_OPUS_BITRATE {
-            overflown_audio_bitrate = Some(MIN_OPUS_BITRATE - audio_bitrate);
+            overflown_audio_bitrate = Some(audio_bitrate - MIN_OPUS_BITRATE);
             audio_bitrate = MIN_OPUS_BITRATE;
         }
         if audio_bitrate > MAX_OPUS_BITRATE {
@@ -96,6 +127,15 @@ impl FFMPEGCommand {
         }
 
         if let Some(overflow) = overflown_audio_bitrate {
+            /*
+            println!(
+                "-b:v:{}\n-b:a:{} (ovw: {})\nsum:{}/{}",
+                video_bitrate,
+                audio_bitrate,
+                overflow,
+                video_bitrate + audio_bitrate,
+                size
+            );*/
             video_bitrate = video_bitrate + overflow;
         }
 
@@ -112,25 +152,56 @@ impl FFMPEGCommand {
 
         let old_path_str = path.as_os_str().to_str().context("missing or bad path")?;
         let mut new_path = path.clone();
-        new_path.set_extension("webm");
 
         let scale_arg = format!("scale=-1:{height}");
-        let bitrate_arg = format!("{video_bitrate}k");
+        let bitrate_arg = format!("{}k", video_bitrate as u16);
         let minrate_arg = format!("{}k", (video_bitrate * 0.5) as u16);
         let maxrate_arg = format!("{}k", (video_bitrate * 1.45) as u16);
-        let ba_arg = format!("{audio_bitrate}k");
+        let ba_arg = format!("{}k", audio_bitrate as u16);
+        let mut passlogfile = path.clone();
+        passlogfile.set_extension("");
         let mut command = Command::new("ffmpeg");
         let mut command2 = Command::new("ffmpeg");
         command.args(["-progress", "-", "-nostats", "-stats_period", "50ms"]);
         command2.args(["-progress", "-", "-nostats", "-stats_period", "50ms"]);
+        let video_codec;
+        let audio_codec;
+        match codec {
+            VideoCodec::WEBM => {
+                video_codec = "libvpx-vp9";
+                audio_codec = "libopus";
+                new_path.set_extension("webm");
+                new_path.set_file_name(
+                    "minified_".to_owned() + new_path.file_name().unwrap().to_str().unwrap(),
+                )
+            }
+            VideoCodec::HEVC => {
+                video_codec = "libx265";
+                audio_codec = "aac";
+                new_path.set_extension("mp4");
+                new_path.set_file_name(
+                    "minified_".to_owned() + new_path.file_name().unwrap().to_str().unwrap(),
+                )
+            }
+        };
+        /*
+        println!(
+            "{} * ({}+{}) ~= {} (actually is {})",
+            duration,
+            video_bitrate,
+            audio_bitrate,
+            size,
+            (duration * ((video_bitrate + audio_bitrate) / 1000.)) as f32
+        );
+        */
         let pass = [
             "-y",
             "-i",
             old_path_str,
             "-vcodec",
-            "libvpx-vp9",
+            video_codec,
             "-acodec",
-            "libopus",
+            audio_codec,
             "-vf",
             &scale_arg,
             "-deadline",
@@ -165,10 +236,21 @@ impl FFMPEGCommand {
             "60",
             "-g",
             "240",
+            "-passlogfile",
+            passlogfile
+                .as_os_str()
+                .to_str()
+                .context("missing or bad path")?,
         ];
 
         command.args(pass);
-        command.args(["-pass", "1", "-f", "webm"]);
+
+        command.args([
+            "-pass",
+            "1",
+            "-f",
+            path.extension().unwrap().to_str().unwrap(),
+        ]);
         if cfg!(windows) {
             command.arg("NUL");
         } else {
@@ -183,7 +265,7 @@ impl FFMPEGCommand {
                 .to_str()
                 .context("missing or bad path")?,
         ]);
-
+        dbg!(&command2);
         Ok(FFMPEGCommand {
             file_name: path.file_name().unwrap().to_str().unwrap().to_owned(),
             resolution: None,
@@ -255,7 +337,7 @@ pub enum EncodingStatus {
     NotStarted,
 }
 
-async fn parse_ffprobe(path: &PathBuf) -> anyhow::Result<(Option<f32>, Option<(u16, u16)>)> {
+async fn parse_ffprobe(path: &PathBuf) -> anyhow::Result<MediaData> {
     let ffprobe = Command::new("ffprobe")
         .arg(path)
         .stderr(Stdio::piped())
@@ -265,17 +347,26 @@ async fn parse_ffprobe(path: &PathBuf) -> anyhow::Result<(Option<f32>, Option<(u
         .status
         .exit_ok()
         .context("Failed to run ffprobe. Make sure ffprobe is installed and file exists")?;
-    let ffprobe_output = std::str::from_utf8(&ffprobe.stderr)?;
-    let mut duration = None;
+
+    let text = std::str::from_utf8(&ffprobe.stderr)?;
+
+    let duration;
+    if let Ok(dur) = parse_duration(text) {
+        duration = dur
+    } else {
+        bail!("FFProbe missing duration in media. Is file corrupted or non-existent?")
+    }
+    let old_kbit_rate = parse_bitrate(text).ok();
+
     let mut resolution = None;
-    let text = ffprobe_output;
-    if text.contains("Duration") {
-        duration = Some(parse_duration(text)?);
-    }
     if text.contains("Stream") {
-        resolution = Some(parse_resolution(text)?);
+        resolution = parse_resolution(text).ok();
     }
-    return Ok((duration, resolution));
+    return Ok(MediaData {
+        duration,
+        resolution,
+        old_kbit_rate,
+    });
 }
 
 fn parse_duration(text: &str) -> anyhow::Result<f32> {
@@ -304,6 +395,14 @@ fn parse_duration(text: &str) -> anyhow::Result<f32> {
         .parse::<f32>()?;
     Ok(h * 60. * 60. + m * 60. + s)
 }
+
+fn parse_bitrate(text: &str) -> anyhow::Result<u16> {
+    let text = text[text.find("bitrate").unwrap()..].to_owned();
+    let bitrate_text = text[9..text.find("/").unwrap() - 2].to_owned();
+
+    Ok(bitrate_text.parse::<u16>()?)
+}
+
 fn parse_resolution(text: &str) -> anyhow::Result<(u16, u16)> {
     let text = text[text.find("Stream").unwrap()..].to_owned();
     let sar_i = text

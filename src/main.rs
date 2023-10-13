@@ -1,7 +1,7 @@
 #![feature(exit_status_error)]
 
 use anyhow::Context;
-use clap::{arg, command, value_parser};
+use clap::{arg, command, value_parser, ValueEnum};
 use encoder::{FFMPEGCommand, MediaType};
 use std::{path::PathBuf, process::Stdio, sync::Arc};
 use tokio::{
@@ -14,6 +14,31 @@ use crate::encoder::EncodingStatus;
 mod encoder;
 mod ui;
 
+#[derive(Debug, Clone)]
+pub enum VideoCodec {
+    WEBM,
+    HEVC,
+}
+
+impl std::fmt::Display for VideoCodec {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Self::WEBM => write!(f, "WEBM"),
+            Self::HEVC => write!(f, "HEVC"),
+        }
+    }
+}
+
+impl VideoCodec {
+    pub fn from_string(string: &str) -> Option<Self> {
+        match string.to_lowercase().as_str() {
+            "webm" => Some(Self::WEBM),
+            "hevc" => Some(Self::HEVC),
+            _ => None,
+        }
+    }
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let args = command!()
@@ -25,6 +50,11 @@ async fn main() -> anyhow::Result<()> {
             .value_parser(value_parser!(u16))
             )
         .arg(
+            arg!(-c --codec <CODEC> "Choose video codec between `HEVC` (H.265) and `WEBM` (vp9).")
+            .required(false)
+            .default_value("WEBM")
+            )
+        .arg(
             arg!(-f --files <FILES> "Comma separated files to convert. EG: -f=<FILE>,<FILE>")
             .required(true)
             .value_parser(value_parser!(PathBuf))
@@ -33,11 +63,16 @@ async fn main() -> anyhow::Result<()> {
         ).get_matches();
     let size = args
         .get_one::<u16>("size")
-        .expect("Default value dissapeared from rate");
+        .expect("Default value dissapeared from rate")
+        * 8;
     let files = args
         .get_many::<PathBuf>("files")
         .context("No files specified")?
         .collect::<Vec<_>>();
+
+    let binding = "webm".to_owned();
+    let codec = args.get_one::<String>("codec").unwrap_or(&binding);
+    let codec = VideoCodec::from_string(codec).unwrap_or(VideoCodec::WEBM);
 
     let commands: Arc<Mutex<Vec<FFMPEGCommand>>> = Arc::new(Mutex::new(vec![]));
     {
@@ -55,21 +90,32 @@ async fn main() -> anyhow::Result<()> {
                 .as_str()
             {
                 "webm" | "mp4" | "mov" | "avi" | "mpeg" | "mkv" => {
-                    command = FFMPEGCommand::new(MediaType::Video, file, size.clone()).await?;
+                    command =
+                        FFMPEGCommand::new(MediaType::Video, file, size.clone(), codec.clone())
+                            .await?;
                 }
                 "mp3" | "wav" | "ogg" | "opus" | "flac" | "aiff" => {
-                    command = FFMPEGCommand::new(MediaType::Audio, file, size.clone()).await?;
+                    command =
+                        FFMPEGCommand::new(MediaType::Audio, file, size.clone(), codec.clone())
+                            .await?;
                 }
                 "jpg" | "png" | "webp" | "exr" | "jpeg" | "tiff" | "bpm" | "raw" | "tif" => {
-                    command = FFMPEGCommand::new(MediaType::Image, file, size.clone()).await?;
+                    command =
+                        FFMPEGCommand::new(MediaType::Image, file, size.clone(), codec.clone())
+                            .await?;
                 }
                 "gif" => {
-                    command =
-                        FFMPEGCommand::new(MediaType::AnimatedImage, file, size.clone()).await?;
+                    command = FFMPEGCommand::new(
+                        MediaType::AnimatedImage,
+                        file,
+                        size.clone(),
+                        codec.clone(),
+                    )
+                    .await?;
                 }
                 _ => break,
             }
-            //dbg!(&command.command.0);
+            dbg!(&command.command.0);
 
             command.command.0.stdout(Stdio::piped());
             command.command.0.stderr(Stdio::null());

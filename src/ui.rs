@@ -8,7 +8,7 @@ use tokio::time::interval;
 pub async fn display(commands: Arc<Mutex<Vec<FFMPEGCommand>>>) {
     let mb = MultiProgress::new();
     let sty = ProgressStyle::with_template(
-        "{spinner:.blue} {msg} [{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} (ms)",
+        "{spinner:.blue} {msg} [{elapsed_precise}/{eta_precise}(eta)] {bar:40.cyan/blue} {pos:>7}/{len:7} (ms)",
     )
     .unwrap()
     .tick_strings(&[
