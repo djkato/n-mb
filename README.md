@@ -1,13 +1,3 @@
-<script src='https://storage.ko-fi.com/cdn/scripts/overlay-widget.js'></script>
-<script>
-  kofiWidgetOverlay.draw('djkato', {
-    'type': 'floating-chat',
-    'floating-chat.donateButton.text': 'Support me',
-    'floating-chat.donateButton.background-color': '#794bc4',
-    'floating-chat.donateButton.text-color': '#fff'
-  });
-</script>
-
 # Automatically converts any media file and makes sure its under your limit!
 For all those who want to post memes that are just too big and surpass the 25mb free upload limit on discord, this is the app for you!
 
