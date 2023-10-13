@@ -8,7 +8,7 @@ use tokio::{
 
 use crate::VideoCodec;
 const MAX_OPUS_BITRATE: f32 = 256.; //kbits
-const MIN_OPUS_BITRATE: f32 = 56.; //kbits
+const MIN_OPUS_BITRATE: f32 = 50.; //kbits
 
 pub struct FFMPEGCommand {
     pub file_name: String,
@@ -60,7 +60,7 @@ impl FFMPEGCommand {
             }
         };
 
-        let bitrate = (size as f32 * 1000. / duration) * 0.9;
+        let bitrate = (size as f32 * 1000. / duration) * 0.85;
         let bitrate = bitrate.clamp(MIN_OPUS_BITRATE, max_kbit_rate) as u16;
         /*
         println!(
@@ -136,7 +136,7 @@ impl FFMPEGCommand {
                 video_bitrate + audio_bitrate,
                 size
             );*/
-            video_bitrate = video_bitrate + overflow;
+            video_bitrate += overflow;
         }
 
         let mut height = resolution.1;
@@ -265,7 +265,6 @@ impl FFMPEGCommand {
                 .to_str()
                 .context("missing or bad path")?,
         ]);
-        dbg!(&command2);
         Ok(FFMPEGCommand {
             file_name: path.file_name().unwrap().to_str().unwrap().to_owned(),
             resolution: None,
@@ -317,7 +316,7 @@ impl FFMPEGCommand {
             progress_bar: None,
         })
     }
-    fn create_animated_image(path: &PathBuf) -> anyhow::Result<Self> {
+    fn create_animated_image(_path: &PathBuf) -> anyhow::Result<Self> {
         bail!("")
     }
 }
@@ -362,24 +361,24 @@ async fn parse_ffprobe(path: &PathBuf) -> anyhow::Result<MediaData> {
     if text.contains("Stream") {
         resolution = parse_resolution(text).ok();
     }
-    return Ok(MediaData {
+    Ok(MediaData {
         duration,
         resolution,
         old_kbit_rate,
-    });
+    })
 }
 
 fn parse_duration(text: &str) -> anyhow::Result<f32> {
     let text = text[text.find("Duration").unwrap()..].to_owned();
     let dur_text = text[text
-        .find(":")
+        .find(':')
         .context("something wrong with the ffprobe output")?
         + 2
         ..text
-            .find(",")
+            .find(',')
             .context("something wrong with the ffprobe output")?]
         .to_owned();
-    let durs_text: Vec<&str> = dur_text.split(":").collect();
+    let durs_text: Vec<&str> = dur_text.split(':').collect();
     let mut durs_text_iter = durs_text.into_iter();
     let h = durs_text_iter
         .next()
@@ -398,7 +397,7 @@ fn parse_duration(text: &str) -> anyhow::Result<f32> {
 
 fn parse_bitrate(text: &str) -> anyhow::Result<u16> {
     let text = text[text.find("bitrate").unwrap()..].to_owned();
-    let bitrate_text = text[9..text.find("/").unwrap() - 2].to_owned();
+    let bitrate_text = text[9..text.find('/').unwrap() - 2].to_owned();
 
     Ok(bitrate_text.parse::<u16>()?)
 }
@@ -411,7 +410,7 @@ fn parse_resolution(text: &str) -> anyhow::Result<(u16, u16)> {
         - 1;
 
     let rb_b4_sar_i = text[..sar_i]
-        .rfind(",")
+        .rfind(',')
         .context("something wrong with the ffprobe output")?
         + 1;
 
@@ -419,17 +418,17 @@ fn parse_resolution(text: &str) -> anyhow::Result<(u16, u16)> {
     let res_text = res_text.trim().to_owned();
 
     let width = res_text[..res_text
-        .find("x")
+        .find('x')
         .context("something wrong with ffprobe output")?]
         .to_owned()
         .parse::<u16>()?;
 
     let height = res_text[res_text
-        .find("x")
+        .find('x')
         .context("something wrong with ffprobe output")?
         + 1..]
         .to_owned()
         .parse::<u16>()?;
 
-    return Ok((width, height));
+    Ok((width, height))
 }

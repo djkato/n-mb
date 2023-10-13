@@ -1,7 +1,7 @@
 #![feature(exit_status_error)]
 
 use anyhow::Context;
-use clap::{arg, command, value_parser, ValueEnum};
+use clap::{arg, command, value_parser};
 use encoder::{FFMPEGCommand, MediaType};
 use std::{path::PathBuf, process::Stdio, sync::Arc};
 use tokio::{
@@ -91,31 +91,23 @@ async fn main() -> anyhow::Result<()> {
             {
                 "webm" | "mp4" | "mov" | "avi" | "mpeg" | "mkv" => {
                     command =
-                        FFMPEGCommand::new(MediaType::Video, file, size.clone(), codec.clone())
-                            .await?;
+                        FFMPEGCommand::new(MediaType::Video, file, size, codec.clone()).await?;
                 }
                 "mp3" | "wav" | "ogg" | "opus" | "flac" | "aiff" => {
                     command =
-                        FFMPEGCommand::new(MediaType::Audio, file, size.clone(), codec.clone())
-                            .await?;
+                        FFMPEGCommand::new(MediaType::Audio, file, size, codec.clone()).await?;
                 }
                 "jpg" | "png" | "webp" | "exr" | "jpeg" | "tiff" | "bpm" | "raw" | "tif" => {
                     command =
-                        FFMPEGCommand::new(MediaType::Image, file, size.clone(), codec.clone())
-                            .await?;
+                        FFMPEGCommand::new(MediaType::Image, file, size, codec.clone()).await?;
                 }
                 "gif" => {
-                    command = FFMPEGCommand::new(
-                        MediaType::AnimatedImage,
-                        file,
-                        size.clone(),
-                        codec.clone(),
-                    )
-                    .await?;
+                    command =
+                        FFMPEGCommand::new(MediaType::AnimatedImage, file, size, codec.clone())
+                            .await?;
                 }
                 _ => break,
             }
-            dbg!(&command.command.0);
 
             command.command.0.stdout(Stdio::piped());
             command.command.0.stderr(Stdio::null());
@@ -168,7 +160,7 @@ async fn main() -> anyhow::Result<()> {
             'line: while let Ok(Some(line)) = buff_reader.1.next_line().await {
                 if let Some(time_start) = line.find("out_time=") {
                     let time: Vec<String> = line[time_start + 10..]
-                        .split(":")
+                        .split(':')
                         .map(|s| s.to_owned())
                         .collect();
 
