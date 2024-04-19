@@ -110,15 +110,13 @@ async fn main() -> anyhow::Result<()> {
             }
 
             command.command.0.stdout(Stdio::piped());
-            command.command.0.stderr(Stdio::null());
+            command.command.0.stderr(Stdio::piped());
             command.command.0.stdin(Stdio::null());
-            command.command.0.kill_on_drop(true);
             if command.media_type == MediaType::Video {
                 let mut pass2 = command.command.1.unwrap();
                 pass2.stdout(Stdio::piped());
-                pass2.stderr(Stdio::null());
+                pass2.stderr(Stdio::piped());
                 pass2.stdin(Stdio::null());
-                pass2.kill_on_drop(true);
                 command.command.1 = Some(pass2)
             }
 
@@ -158,6 +156,7 @@ async fn main() -> anyhow::Result<()> {
             intv.tick().await;
 
             'line: while let Ok(Some(line)) = buff_reader.1.next_line().await {
+                // dbg!(&line);
                 if let Some(time_start) = line.find("out_time=") {
                     let time: Vec<String> = line[time_start + 10..]
                         .split(':')
@@ -205,7 +204,11 @@ async fn main() -> anyhow::Result<()> {
                                     command.passed_pass_1 = true;
                                 }
                             },
-                            _ => command.status = EncodingStatus::Finished,
+                            _ => {
+                                println!("Finished");
+                                command.status = EncodingStatus::Finished;
+                                println!("test");
+                            }
                         },
                         "continue" => command.status = EncodingStatus::InProgress,
                         _ => (),

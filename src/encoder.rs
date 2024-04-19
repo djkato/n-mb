@@ -28,7 +28,7 @@ pub struct FFMPEGCommand {
 struct MediaData {
     resolution: Option<(u16, u16)>,
     duration: f32,
-    old_kbit_rate: Option<u16>,
+    old_kbit_rate: Option<u32>,
 }
 
 impl FFMPEGCommand {
@@ -234,6 +234,8 @@ impl FFMPEGCommand {
             "6",
             "-qmax",
             "60",
+            "-qmin",
+            "1",
             "-g",
             "240",
             "-passlogfile",
@@ -249,7 +251,7 @@ impl FFMPEGCommand {
             "-pass",
             "1",
             "-f",
-            path.extension().unwrap().to_str().unwrap(),
+            new_path.extension().unwrap().to_str().unwrap(),
         ]);
         if cfg!(windows) {
             command.arg("NUL");
@@ -265,6 +267,8 @@ impl FFMPEGCommand {
                 .to_str()
                 .context("missing or bad path")?,
         ]);
+        // dbg!(&command);
+        // dbg!(&command2);
         Ok(FFMPEGCommand {
             file_name: path.file_name().unwrap().to_str().unwrap().to_owned(),
             resolution: None,
@@ -338,6 +342,16 @@ pub enum EncodingStatus {
 
 async fn parse_ffprobe(path: &PathBuf) -> anyhow::Result<MediaData> {
     let ffprobe = Command::new("ffprobe")
+        .args([
+            "-v",
+            "error",
+            "-select_streams",
+            "v:0",
+            "-show_entries",
+            "stream=width,height,duration,bit_rate",
+            "-of",
+            "csv=s=,:p=0",
+        ])
         .arg(path)
         .stderr(Stdio::piped())
         .output()
@@ -347,20 +361,33 @@ async fn parse_ffprobe(path: &PathBuf) -> anyhow::Result<MediaData> {
         .exit_ok()
         .context("Failed to run ffprobe. Make sure ffprobe is installed and file exists")?;
 
-    let text = std::str::from_utf8(&ffprobe.stderr)?;
+    let text = std::str::from_utf8(&ffprobe.stdout)?;
 
-    let duration;
-    if let Ok(dur) = parse_duration(text) {
-        duration = dur
-    } else {
-        bail!("FFProbe missing duration in media. Is file corrupted or non-existent?")
-    }
-    let old_kbit_rate = parse_bitrate(text).ok();
+    let mem = text.split(',').collect::<Vec<_>>();
 
-    let mut resolution = None;
-    if text.contains("Stream") {
-        resolution = parse_resolution(text).ok();
-    }
+    let width = mem.get(0).and_then(|v| v.parse::<u16>().ok());
+    let height = mem.get(1).and_then(|v| v.parse::<u16>().ok());
+    let duration = mem
+        .get(2)
+        .and_then(|v| v.parse::<f32>().ok())
+        .context("missing duration")?;
+    let old_kbit_rate = mem
+        .get(3)
+        .and_then(|v| v.parse::<u32>().ok().and_then(|v| Some(v / 1000)));
+
+    let resolution = width.zip(height);
+    // if let Ok(dur) = parse_duration(text) {
+    //     duration = dur
+    // } else {
+    //     bail!("FFProbe missing duration in media. Is file corrupted or non-existent?")
+    // }
+    // let old_kbit_rate = parse_bitrate(text).ok();
+    //
+    // let mut resolution = None;
+    // if text.contains("Stream") {
+    //     resolution = parse_resolution(text).ok();
+    // }
+    //
     Ok(MediaData {
         duration,
         resolution,

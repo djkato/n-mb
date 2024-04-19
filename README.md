@@ -4,15 +4,16 @@ For all those who want to post memes that are just too big and surpass the 25mb 
 
 ![nbm usage](https://github.com/djkato/n-mb/assets/25299243/b2531d88-5de1-465f-9bef-d0ad225f06b4)
 
-## This program outputs to following formats:
+## This program outputs to following formats:
  - audio codec: opus .ogg
  - video codec: vp9 + opus .webm
  - image codec: vp8 .webp (for gifs too)
 
-## How to install Binary(Windows, Linux):
-1. Download binary from [Releases](https://github.com/djkato/n-mb/releases), put into $PATH
-2. get ffmpeg for your platform [here](https://ffmpeg.org/download.html), put into $PATH
-3. execute anywhere using the `nmb --size/-s <SIZE IN MB> --codec/-c <WEBM/HEVC> --files/-f=<FILE 1>,<FILE 2> . . .` command!
+~~## How to install Binary(Windows, Linux):~~
+Releases are no longer being kept uptodate, please follow [Source installation](#how-to-install-from-sourcewindows-linux-macos)
+1. ~~Download binary from [Releases](https://github.com/djkato/n-mb/releases), put into $PATH~~
+2. ~~get ffmpeg for your platform [here](https://ffmpeg.org/download.html), put into $PATH~~
+3. ~~execute anywhere using the `nmb --size/-s <SIZE IN MB> --codec/-c <WEBM/HEVC> --files/-f=<FILE 1>,<FILE 2> . . .` command!~~
 
 ## How to install From Source(Windows, Linux, MacOS):
 1. get rustup (cargo, rustc etc) from [here](https://www.rust-lang.org/tools/install)
