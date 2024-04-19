@@ -9,7 +9,7 @@ For all those who want to post memes that are just too big and surpass the 25mb 
  - video codec: vp9 + opus .webm
  - image codec: vp8 .webp (for gifs too)
 
-~~## How to install Binary(Windows, Linux):~~
+## ~~How to install Binary(Windows, Linux):~~
 
 **Releases are no longer being kept uptodate, please follow [Source installation](#how-to-install-from-sourcewindows-linux-macos)**
 
