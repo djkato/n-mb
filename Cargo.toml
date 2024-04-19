@@ -10,6 +10,7 @@ repository = "https://github.com/djkato/n-mb"
 readme = "README.md"
 keywords = ["media", "ffmpeg", "cli"]
 categories = ["command-line-utilities"]
+exclude = ["*.mp4", "*.mp3", "*.jpg", "*.ogg", "*.webp", "*.webm"]
 
 [dependencies]
 anyhow = "1.0.75"
@@ -35,4 +36,4 @@ opt-level = 'z'   # Optimize for size
 lto = true        # Enable link-time optimization
 codegen-units = 1 # Reduce number of codegen units to increase optimizations
 panic = 'abort'   # Abort on panic
-strip = true      # Strip symbols from binary*
+# strip = true      # Strip symbols from binary*
