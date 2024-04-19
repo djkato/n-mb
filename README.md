@@ -10,7 +10,9 @@ For all those who want to post memes that are just too big and surpass the 25mb 
  - image codec: vp8 .webp (for gifs too)
 
 ~~## How to install Binary(Windows, Linux):~~
-Releases are no longer being kept uptodate, please follow [Source installation](#how-to-install-from-sourcewindows-linux-macos)
+
+**Releases are no longer being kept uptodate, please follow [Source installation](#how-to-install-from-sourcewindows-linux-macos)**
+
 1. ~~Download binary from [Releases](https://github.com/djkato/n-mb/releases), put into $PATH~~
 2. ~~get ffmpeg for your platform [here](https://ffmpeg.org/download.html), put into $PATH~~
 3. ~~execute anywhere using the `nmb --size/-s <SIZE IN MB> --codec/-c <WEBM/HEVC> --files/-f=<FILE 1>,<FILE 2> . . .` command!~~
