@@ -1,4 +1,5 @@
 /target
+*.log
 *.webp
 *.webm
 *.ogg

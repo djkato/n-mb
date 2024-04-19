@@ -205,9 +205,7 @@ async fn main() -> anyhow::Result<()> {
                                 }
                             },
                             _ => {
-                                println!("Finished");
                                 command.status = EncodingStatus::Finished;
-                                println!("test");
                             }
                         },
                         "continue" => command.status = EncodingStatus::InProgress,
