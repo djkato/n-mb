@@ -365,7 +365,7 @@ async fn parse_ffprobe(path: &PathBuf) -> anyhow::Result<MediaData> {
 
     let mem = text.split(',').collect::<Vec<_>>();
 
-    let width = mem.get(0).and_then(|v| v.parse::<u16>().ok());
+    let width = mem.first().and_then(|v| v.parse::<u16>().ok());
     let height = mem.get(1).and_then(|v| v.parse::<u16>().ok());
     let duration = mem
         .get(2)
@@ -373,7 +373,7 @@ async fn parse_ffprobe(path: &PathBuf) -> anyhow::Result<MediaData> {
         .context("missing duration")?;
     let old_kbit_rate = mem
         .get(3)
-        .and_then(|v| v.parse::<u32>().ok().and_then(|v| Some(v / 1000)));
+        .and_then(|v| v.parse::<u32>().ok().map(|v| v / 1000));
 
     let resolution = width.zip(height);
     // if let Ok(dur) = parse_duration(text) {
@@ -422,40 +422,40 @@ fn parse_duration(text: &str) -> anyhow::Result<f32> {
     Ok(h * 60. * 60. + m * 60. + s)
 }
 
-fn parse_bitrate(text: &str) -> anyhow::Result<u16> {
-    let text = text[text.find("bitrate").unwrap()..].to_owned();
-    let bitrate_text = text[9..text.find('/').unwrap() - 2].to_owned();
-
-    Ok(bitrate_text.parse::<u16>()?)
-}
-
-fn parse_resolution(text: &str) -> anyhow::Result<(u16, u16)> {
-    let text = text[text.find("Stream").unwrap()..].to_owned();
-    let sar_i = text
-        .find("[SAR ")
-        .context("something wrong with the ffprobe output")?
-        - 1;
-
-    let rb_b4_sar_i = text[..sar_i]
-        .rfind(',')
-        .context("something wrong with the ffprobe output")?
-        + 1;
-
-    let res_text = text[rb_b4_sar_i..sar_i].to_owned();
-    let res_text = res_text.trim().to_owned();
-
-    let width = res_text[..res_text
-        .find('x')
-        .context("something wrong with ffprobe output")?]
-        .to_owned()
-        .parse::<u16>()?;
-
-    let height = res_text[res_text
-        .find('x')
-        .context("something wrong with ffprobe output")?
-        + 1..]
-        .to_owned()
-        .parse::<u16>()?;
-
-    Ok((width, height))
-}
+// fn parse_bitrate(text: &str) -> anyhow::Result<u16> {
+//     let text = text[text.find("bitrate").unwrap()..].to_owned();
+//     let bitrate_text = text[9..text.find('/').unwrap() - 2].to_owned();
+//
+//     Ok(bitrate_text.parse::<u16>()?)
+// }
+//
+// fn parse_resolution(text: &str) -> anyhow::Result<(u16, u16)> {
+//     let text = text[text.find("Stream").unwrap()..].to_owned();
+//     let sar_i = text
+//         .find("[SAR ")
+//         .context("something wrong with the ffprobe output")?
+//         - 1;
+//
+//     let rb_b4_sar_i = text[..sar_i]
+//         .rfind(',')
+//         .context("something wrong with the ffprobe output")?
+//         + 1;
+//
+//     let res_text = text[rb_b4_sar_i..sar_i].to_owned();
+//     let res_text = res_text.trim().to_owned();
+//
+//     let width = res_text[..res_text
+//         .find('x')
+//         .context("something wrong with ffprobe output")?]
+//         .to_owned()
+//         .parse::<u16>()?;
+//
+//     let height = res_text[res_text
+//         .find('x')
+//         .context("something wrong with ffprobe output")?
+//         + 1..]
+//         .to_owned()
+//         .parse::<u16>()?;
+//
+//     Ok((width, height))
+// }

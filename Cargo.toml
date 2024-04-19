@@ -16,7 +16,15 @@ anyhow = "1.0.75"
 clap = { version = "4.4.4", features = ["cargo"] }
 indicatif = "0.17.7"
 pbr = "1.1.1"
-tokio = { version = "1.32.0", features = ["full"] }
+tokio = { version = "1.32.0", features = [
+  "macros",
+  "rt-multi-thread",
+  "process",
+  "io-std",
+  "sync",
+  "time",
+  "io-util",
+] }
 
 [[bin]]
 name = "nmb"
