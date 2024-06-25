@@ -367,12 +367,39 @@ async fn parse_ffprobe(path: &PathBuf) -> anyhow::Result<MediaData> {
 
     let width = mem.first().and_then(|v| v.parse::<u16>().ok());
     let height = mem.get(1).and_then(|v| v.parse::<u16>().ok());
+
+    let ffprobe = Command::new("ffprobe")
+        .args([
+            "-v",
+            "error",
+            "-select_streams",
+            "v:0",
+            "-show_entries",
+            "format=duration,bit_rate",
+            "-of",
+            "csv=s=,:p=0",
+        ])
+        .arg(path)
+        .stderr(Stdio::piped())
+        .output()
+        .await?;
+    ffprobe
+        .status
+        .exit_ok()
+        .context("Failed to run ffprobe. Make sure ffprobe is installed and file exists")?;
+    
+
+
+    let text = std::str::from_utf8(&ffprobe.stdout)?;
+
+    let mem = text.split(',').collect::<Vec<_>>();
+
     let duration = mem
-        .get(2)
+        .get(0)
         .and_then(|v| v.parse::<f32>().ok())
         .context("missing duration")?;
     let old_kbit_rate = mem
-        .get(3)
+        .get(1)
         .and_then(|v| v.parse::<u32>().ok().map(|v| v / 1000));
 
     let resolution = width.zip(height);
