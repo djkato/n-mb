@@ -267,8 +267,8 @@ impl FFMPEGCommand {
                 .to_str()
                 .context("missing or bad path")?,
         ]);
-        // dbg!(&command);
-        // dbg!(&command2);
+        dbg!(&command);
+        dbg!(&command2);
         Ok(FFMPEGCommand {
             file_name: path.file_name().unwrap().to_str().unwrap().to_owned(),
             resolution: None,
@@ -341,17 +341,19 @@ pub enum EncodingStatus {
 }
 
 async fn parse_ffprobe(path: &PathBuf) -> anyhow::Result<MediaData> {
+    let args = [
+        "-v",
+        "error",
+        "-select_streams",
+        "v:0",
+        "-show_entries",
+        "stream=width,height,duration,bit_rate",
+        "-of",
+        "csv=s=,:p=0",
+    ];
+
     let ffprobe = Command::new("ffprobe")
-        .args([
-            "-v",
-            "error",
-            "-select_streams",
-            "v:0",
-            "-show_entries",
-            "stream=width,height,duration,bit_rate",
-            "-of",
-            "csv=s=,:p=0",
-        ])
+        .args(args)
         .arg(path)
         .stderr(Stdio::piped())
         .output()
@@ -367,27 +369,62 @@ async fn parse_ffprobe(path: &PathBuf) -> anyhow::Result<MediaData> {
 
     let width = mem.first().and_then(|v| v.parse::<u16>().ok());
     let height = mem.get(1).and_then(|v| v.parse::<u16>().ok());
-    let duration = mem
-        .get(2)
-        .and_then(|v| v.parse::<f32>().ok())
-        .context("missing duration")?;
+
+    let duration = match mem.get(2).and_then(|v| v.parse::<f32>().ok()) {
+        Some(d) => d,
+        None => {
+            let metadata = get_attribute_from_meta("duration", path)
+                .await
+                .context("can't find duration anywhere")?;
+            let res = metadata.parse::<f32>();
+            //see if metadatat had seconds directly
+            if let Ok(d) = res {
+                d
+            } else {
+                //  try to convert 00:00:00:00 to 0.000s
+                if !metadata.contains(":") {
+                    return Err(anyhow::anyhow!("can't find duration of media anywhere"));
+                } else {
+                    let mut res = 0.;
+                    let mut iter = metadata.split(':').rev();
+                    let secs = iter.next().map(|n| n.parse::<f32>().ok()).flatten();
+                    let mins = iter
+                        .next()
+                        .map(|n| n.parse::<f32>().ok().map(|m| m * 60.))
+                        .flatten();
+                    let hrs = iter
+                        .next()
+                        .map(|n| n.parse::<f32>().ok().map(|h| h * 3600.))
+                        .flatten();
+                    let days = iter
+                        .next()
+                        .map(|n| n.parse::<f32>().ok().map(|d| d * 24. * 3600.))
+                        .flatten();
+                    if let Some(s) = secs {
+                        res = res + s
+                    };
+                    if let Some(m) = mins {
+                        res = res + m
+                    };
+                    if let Some(h) = hrs {
+                        res = res + h
+                    };
+                    if let Some(d) = days {
+                        res = res + d
+                    };
+                    res
+                }
+            }
+        }
+    };
+
+    dbg!(&duration);
     let old_kbit_rate = mem
         .get(3)
         .and_then(|v| v.parse::<u32>().ok().map(|v| v / 1000));
 
     let resolution = width.zip(height);
-    // if let Ok(dur) = parse_duration(text) {
-    //     duration = dur
-    // } else {
-    //     bail!("FFProbe missing duration in media. Is file corrupted or non-existent?")
-    // }
-    // let old_kbit_rate = parse_bitrate(text).ok();
-    //
-    // let mut resolution = None;
-    // if text.contains("Stream") {
-    //     resolution = parse_resolution(text).ok();
-    // }
-    //
+
     Ok(MediaData {
         duration,
         resolution,
@@ -395,67 +432,26 @@ async fn parse_ffprobe(path: &PathBuf) -> anyhow::Result<MediaData> {
     })
 }
 
-fn parse_duration(text: &str) -> anyhow::Result<f32> {
-    let text = text[text.find("Duration").unwrap()..].to_owned();
-    let dur_text = text[text
-        .find(':')
-        .context("something wrong with the ffprobe output")?
-        + 2
-        ..text
-            .find(',')
-            .context("something wrong with the ffprobe output")?]
-        .to_owned();
-    let durs_text: Vec<&str> = dur_text.split(':').collect();
-    let mut durs_text_iter = durs_text.into_iter();
-    let h = durs_text_iter
-        .next()
-        .context("something wrong with the ffprobe output")?
-        .parse::<f32>()?;
-    let m = durs_text_iter
-        .next()
-        .context("something wrong with the ffprobe output")?
-        .parse::<f32>()?;
-    let s = durs_text_iter
-        .next()
-        .context("something wrong with the ffprobe output")?
-        .parse::<f32>()?;
-    Ok(h * 60. * 60. + m * 60. + s)
-}
+async fn get_attribute_from_meta(attr: &str, path: &PathBuf) -> Option<String> {
+    let ffprobe = Command::new("ffprobe")
+        .args([
+            "-v",
+            "error",
+            "-select_streams",
+            "v:0",
+            "-show_entries",
+            &format!("stream={attr}:stream_args={attr}"),
+            "-of",
+            "csv=s=,:p=0",
+        ])
+        .arg(path)
+        .stderr(Stdio::piped())
+        .output()
+        .await
+        .ok()?;
+    ffprobe.status.exit_ok().ok()?;
 
-// fn parse_bitrate(text: &str) -> anyhow::Result<u16> {
-//     let text = text[text.find("bitrate").unwrap()..].to_owned();
-//     let bitrate_text = text[9..text.find('/').unwrap() - 2].to_owned();
-//
-//     Ok(bitrate_text.parse::<u16>()?)
-// }
-//
-// fn parse_resolution(text: &str) -> anyhow::Result<(u16, u16)> {
-//     let text = text[text.find("Stream").unwrap()..].to_owned();
-//     let sar_i = text
-//         .find("[SAR ")
-//         .context("something wrong with the ffprobe output")?
-//         - 1;
-//
-//     let rb_b4_sar_i = text[..sar_i]
-//         .rfind(',')
-//         .context("something wrong with the ffprobe output")?
-//         + 1;
-//
-//     let res_text = text[rb_b4_sar_i..sar_i].to_owned();
-//     let res_text = res_text.trim().to_owned();
-//
-//     let width = res_text[..res_text
-//         .find('x')
-//         .context("something wrong with ffprobe output")?]
-//         .to_owned()
-//         .parse::<u16>()?;
-//
-//     let height = res_text[res_text
-//         .find('x')
-//         .context("something wrong with ffprobe output")?
-//         + 1..]
-//         .to_owned()
-//         .parse::<u16>()?;
-//
-//     Ok((width, height))
-// }
+    std::str::from_utf8(&ffprobe.stdout)
+        .ok()
+        .map(|v| v.to_string())
+}
