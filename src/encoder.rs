@@ -267,7 +267,9 @@ impl FFMPEGCommand {
                 .to_str()
                 .context("missing or bad path")?,
         ]);
+        #[cfg(debug_assertions)]
         dbg!(&command);
+        #[cfg(debug_assertions)]
         dbg!(&command2);
         Ok(FFMPEGCommand {
             file_name: path.file_name().unwrap().to_str().unwrap().to_owned(),
