@@ -150,13 +150,14 @@ async fn main() -> anyhow::Result<()> {
         use std::time::Duration;
         use tokio::time::interval;
         let commands_ref = commands.clone();
-        let mut intv = interval(Duration::from_millis(50));
+        let mut intv = interval(Duration::from_millis(10));
 
         command_spawns.push(tokio::spawn(async move {
             intv.tick().await;
 
             'line: while let Ok(Some(line)) = buff_reader.1.next_line().await {
-                // dbg!(&line);
+                #[cfg(debug_assertions)]
+                dbg!(&line);
                 if let Some(time_start) = line.find("out_time=") {
                     let time: Vec<String> = line[time_start + 10..]
                         .split(':')
@@ -169,8 +170,12 @@ async fn main() -> anyhow::Result<()> {
                         if let Ok(number) = part.parse::<f32>() {
                             parsed_time.push(number)
                         } else {
-                            break 'line;
+                            // parsed_time.push(0.);
+                            // break 'line;
                         }
+                    }
+                    if parsed_time.len() == 0 {
+                        parsed_time.append(&mut vec![0., 0., 0.]);
                     }
                     let time = parsed_time[0] * 3600. + parsed_time[1] * 60. + parsed_time[2];
 
@@ -181,6 +186,8 @@ async fn main() -> anyhow::Result<()> {
                     command.progressed_time = time;
                 }
                 if let Some(progress_i) = line.find("progress=") {
+                    #[cfg(debug_assertions)]
+                    println!("found progress!, {}", &line[progress_i + 9..]);
                     let mut command = commands_ref.lock().await;
                     let command = command.get_mut(buff_reader.0).unwrap();
 
