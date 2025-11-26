@@ -18,6 +18,7 @@ mod ui;
 pub enum VideoCodec {
     WEBM,
     HEVC,
+    AV1,
 }
 
 impl std::fmt::Display for VideoCodec {
@@ -25,6 +26,7 @@ impl std::fmt::Display for VideoCodec {
         match self {
             Self::WEBM => write!(f, "WEBM"),
             Self::HEVC => write!(f, "HEVC"),
+            Self::AV1 => write!(f, "AV1"),
         }
     }
 }
@@ -34,6 +36,7 @@ impl VideoCodec {
         match string.to_lowercase().as_str() {
             "webm" => Some(Self::WEBM),
             "hevc" => Some(Self::HEVC),
+            "av1" => Some(Self::AV1),
             _ => None,
         }
     }
@@ -44,15 +47,15 @@ async fn main() -> anyhow::Result<()> {
     let args = command!()
         .about("Simple program to parse files to the most efficient formats within a set size")
         .arg(
-            arg!(-s --size <NUMBER> "Target megabyte size. If not set, default of 25mb (Discords free limit)")
+            arg!(-s --size <NUMBER> "Target megabyte size. If not set, default of 10mb (Discords free limit as of 11.2025)")
             .required(false)
-            .default_value("25")
+            .default_value("10")
             .value_parser(value_parser!(u16))
             )
         .arg(
-            arg!(-c --codec <CODEC> "Choose video codec between `HEVC` (H.265) and `WEBM` (vp9).")
+            arg!(-c --codec <CODEC> "Choose video codec between `HEVC` (H.265), `WEBM` (vp9) and `AV1` (SVT-AV1).")
             .required(false)
-            .default_value("WEBM")
+            .default_value("AV1")
             )
         .arg(
             arg!(-f --files <FILES> "Comma separated files to convert. EG: -f=<FILE>,<FILE>")
@@ -155,7 +158,7 @@ async fn main() -> anyhow::Result<()> {
         command_spawns.push(tokio::spawn(async move {
             intv.tick().await;
 
-            'line: while let Ok(Some(line)) = buff_reader.1.next_line().await {
+            while let Ok(Some(line)) = buff_reader.1.next_line().await {
                 #[cfg(debug_assertions)]
                 dbg!(&line);
                 if let Some(time_start) = line.find("out_time=") {

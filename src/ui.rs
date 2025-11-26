@@ -51,12 +51,12 @@ pub async fn display(commands: Arc<Mutex<Vec<FFMPEGCommand>>>) {
                         },
                         _ => pr.set_message(command.file_name.clone() + ": Encoding"),
                     },
-                    EncodingStatus::Failed => {
-                        pr.set_message(command.file_name.clone() + ": Failed!");
-                        pr.set_position(command.duration.unwrap() as u64);
-                        pr.finish();
-                        break;
-                    }
+                    // EncodingStatus::Failed => {
+                    //     pr.set_message(command.file_name.clone() + ": Failed!");
+                    //     pr.set_position(command.duration.unwrap() as u64);
+                    //     pr.finish();
+                    //     break;
+                    // }
                     EncodingStatus::Finished => {
                         pr.set_message(command.file_name.clone() + ": Finished!");
                         pr.set_position(command.duration.unwrap() as u64);

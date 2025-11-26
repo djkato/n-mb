@@ -1,5 +1,4 @@
 use anyhow::{bail, Context};
-use pbr::{Pipe, ProgressBar};
 use std::{path::PathBuf, process::Stdio};
 use tokio::{
     io::{BufReader, Lines},
@@ -13,8 +12,8 @@ const MIN_OPUS_BITRATE: f32 = 50.; //kbits
 pub struct FFMPEGCommand {
     pub file_name: String,
     pub command: (Command, Option<Command>),
-    pub target_size: u16,
-    pub resolution: Option<(u32, u32)>,
+    // pub target_size: u16,
+    // pub resolution: Option<(u32, u32)>,
     pub duration: Option<f32>,
     pub media_type: MediaType,
     pub exec_handle: Option<Child>,
@@ -22,7 +21,7 @@ pub struct FFMPEGCommand {
     pub status: EncodingStatus,
     pub passed_pass_1: bool,
     pub progressed_time: f32,
-    pub progress_bar: Option<ProgressBar<Pipe>>,
+    // pub progress_bar: Option<ProgressBar<Pipe>>,
 }
 
 struct MediaData {
@@ -41,7 +40,7 @@ impl FFMPEGCommand {
         match media_type {
             MediaType::Video => Self::create_video(path, size, codec).await,
             MediaType::Audio => Self::create_audio(path, size).await,
-            MediaType::Image => Self::create_image(path, size),
+            MediaType::Image => Self::create_image(path),
             MediaType::AnimatedImage => Self::create_animated_image(path),
         }
     }
@@ -93,15 +92,15 @@ impl FFMPEGCommand {
         ]);
         Ok(FFMPEGCommand {
             file_name: path.file_name().unwrap().to_str().unwrap().to_owned(),
-            resolution: None,
+            // resolution: None,
             duration: Some(duration),
             command: (command, None),
             media_type: MediaType::Audio,
-            target_size: size,
+            // target_size: size,
             status: EncodingStatus::NotStarted,
             exec_handle: None,
             buff_reader: None,
-            progress_bar: None,
+            // progress_bar: None,
             passed_pass_1: false,
             progressed_time: 0.,
         })
@@ -167,23 +166,26 @@ impl FFMPEGCommand {
         let video_codec;
         let audio_codec;
         match codec {
+            VideoCodec::AV1 => {
+                video_codec = "libsvtav1";
+                audio_codec = "libopus";
+                new_path.set_extension("mp4");
+            }
+
             VideoCodec::WEBM => {
                 video_codec = "libvpx-vp9";
                 audio_codec = "libopus";
                 new_path.set_extension("webm");
-                new_path.set_file_name(
-                    "minified_".to_owned() + new_path.file_name().unwrap().to_str().unwrap(),
-                )
             }
             VideoCodec::HEVC => {
                 video_codec = "libx265";
                 audio_codec = "aac";
                 new_path.set_extension("mp4");
-                new_path.set_file_name(
-                    "minified_".to_owned() + new_path.file_name().unwrap().to_str().unwrap(),
-                )
             }
         };
+        new_path.set_file_name(
+            "minified_".to_owned() + new_path.file_name().unwrap().to_str().unwrap(),
+        );
         /*
         println!(
             "{} * ({}+{}) ~= {} (actually is {})",
@@ -194,7 +196,7 @@ impl FFMPEGCommand {
             (duration * ((video_bitrate + audio_bitrate) / 1000.)) as f32
         );
         */
-        let pass = [
+        let mut pass = vec![
             "-y",
             "-i",
             old_path_str,
@@ -204,40 +206,12 @@ impl FFMPEGCommand {
             audio_codec,
             "-vf",
             &scale_arg,
-            "-deadline",
-            "good",
-            "-quality",
-            "good",
             "-cpu-used",
             "0",
-            "-undershoot-pct",
-            "0",
-            "-overshoot-pct",
-            "0",
-            "-b:v",
-            &bitrate_arg,
-            "-minrate",
-            &minrate_arg,
-            "-maxrate",
-            &maxrate_arg,
-            "-b:a",
-            &ba_arg,
-            "-row-mt",
-            "1",
-            "-tile-rows",
-            "2",
-            "-tile-columns",
-            "4",
             "-threads",
             "16",
-            "-auto-alt-ref",
-            "6",
-            "-qmax",
-            "60",
-            "-qmin",
-            "1",
-            "-g",
-            "240",
+            "-b:a",
+            &ba_arg,
             "-passlogfile",
             passlogfile
                 .as_os_str()
@@ -245,7 +219,53 @@ impl FFMPEGCommand {
                 .context("missing or bad path")?,
         ];
 
-        command.args(pass);
+        let av1_target_bitrate = format!("{}k", (video_bitrate.clone()) as u16);
+        let mut codec_pass = match codec {
+            VideoCodec::AV1 => vec![
+                "-b:v",
+                &av1_target_bitrate,
+                "-preset",
+                "5",
+                "-svtav1-params",
+                "rc=1:scd=1",
+            ],
+            VideoCodec::WEBM | VideoCodec::HEVC => vec![
+                "-minrate",
+                &minrate_arg,
+                "-maxrate",
+                &maxrate_arg,
+                "-qmax",
+                "60",
+                "-qmin",
+                "1",
+                "-row-mt",
+                "1",
+                "-tile-rows",
+                "2",
+                "-tile-columns",
+                "4",
+                "-deadline",
+                "good",
+                "-quality",
+                "good",
+                "-undershoot-pct",
+                "0",
+                "-overshoot-pct",
+                "0",
+                "-auto-alt-ref",
+                "6",
+                "-g",
+                "240",
+                "-b:v",
+                &bitrate_arg,
+            ],
+        };
+
+        // "-b:v",
+        // "40886k",
+        pass.append(&mut codec_pass);
+
+        command.args(pass.clone());
 
         command.args([
             "-pass",
@@ -258,7 +278,7 @@ impl FFMPEGCommand {
         } else {
             command.arg("/dev/null");
         }
-        command2.args(pass);
+        command2.args(pass.clone());
         command2.args([
             "-pass",
             "2",
@@ -273,21 +293,21 @@ impl FFMPEGCommand {
         dbg!(&command2);
         Ok(FFMPEGCommand {
             file_name: path.file_name().unwrap().to_str().unwrap().to_owned(),
-            resolution: None,
+            // resolution: None,
             duration: Some(duration),
             command: (command, Some(command2)),
             media_type: MediaType::Video,
-            target_size: size,
+            // target_size: size,
             buff_reader: None,
             exec_handle: None,
             status: EncodingStatus::InProgress,
             passed_pass_1: false,
             progressed_time: 0.,
-            progress_bar: None,
+            // progress_bar: None,
         })
     }
 
-    fn create_image(path: &PathBuf, size: u16) -> anyhow::Result<Self> {
+    fn create_image(path: &PathBuf) -> anyhow::Result<Self> {
         let mut new_path = path.clone();
         new_path.set_extension("webp");
         let mut command = Command::new("ffmpeg");
@@ -309,17 +329,17 @@ impl FFMPEGCommand {
         ]);
         Ok(FFMPEGCommand {
             file_name: path.file_name().unwrap().to_str().unwrap().to_owned(),
-            resolution: None,
+            // resolution: None,
             duration: None,
             command: (command, None),
             media_type: MediaType::Image,
-            target_size: size,
+            // target_size: size,
             status: EncodingStatus::InProgress,
             exec_handle: None,
             buff_reader: None,
             passed_pass_1: false,
             progressed_time: 0.,
-            progress_bar: None,
+            // progress_bar: None,
         })
     }
     fn create_animated_image(_path: &PathBuf) -> anyhow::Result<Self> {
@@ -337,7 +357,7 @@ pub enum MediaType {
 #[derive(PartialEq, Eq, Debug)]
 pub enum EncodingStatus {
     Finished,
-    Failed,
+    // Failed,
     InProgress,
     NotStarted,
 }
@@ -420,7 +440,7 @@ async fn parse_ffprobe(path: &PathBuf) -> anyhow::Result<MediaData> {
         }
     };
 
-    dbg!(&duration);
+    // dbg!(&duration);
     let old_kbit_rate = mem
         .get(3)
         .and_then(|v| v.parse::<u32>().ok().map(|v| v / 1000));
