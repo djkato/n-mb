@@ -25,6 +25,6 @@ For all those who want to post memes that are just too big and surpass the ~8mb~
 1. get rustup (cargo, rustc etc) from [here](https://www.rust-lang.org/tools/install)
 2. get ffmpeg for your platform [here](https://ffmpeg.org/download.html), put into $PATH
 3. run `cargo install n-mb` in your favourite terminal
-4. execute anywhere using the `nmb --size/-s <SIZE IN MB> --codec/-c <WEBM/HEVC> --files/-f=<FILE 1>,<FILE 2> . . .` command!
+4. execute anywhere using the `nmb --size/-s <SIZE IN MB> --codec/-c <WEBM/HEVC/AV1> --files/-f=<FILE 1>,<FILE 2> . . .` command!
 
 <sub>Thanks for an amazing read on how to optimize vp9 for file sizes deterenkelt, I recommend this read: https://codeberg.org/deterenkelt/Nadeshiko/wiki/Researches%E2%80%89%E2%80%93%E2%80%89VP9-and-overshooting</sub>
